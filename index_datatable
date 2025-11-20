@@ -1,0 +1,150 @@
+🏗️ 1. Install Yajra DataTables (Laravel)
+>composer require yajra/laravel-datatables-oracle
+
+Publish config (optional but recommended):
+>php artisan vendor:publish --tag=datatables
+
+🛠️ 2. Add Route
+use App\Http\Controllers\LifeMemberController;
+
+Route::get('/life-members', [LifeMemberController::class, 'index'])->name('life-members.index');
+Route::get('/life-members/ajax', [LifeMemberController::class, 'ajax'])->name('life-members.ajax');
+
+🎛️ 3. Controller: index() + ajax()
+
+Open LifeMemberController.php
+Replace your index method with:
+
+public function index()
+{
+    return view('life_members.index');
+}
+
+Add AJAX handler:
+public function ajax(Request $request)
+{
+    $query = LifeMember::query();
+
+    // 🔍 Search
+    if (!empty($request->search['value'])) {
+        $search = $request->search['value'];
+        $query->where(function ($q) use ($search) {
+            $q->where('name', 'like', "%$search%")
+              ->orWhere('lm_no', 'like', "%$search%")
+              ->orWhere('address', 'like', "%$search%");
+        });
+    }
+
+    // 🟦 Filter: Status
+    if ($request->status != '') {
+        $query->where('status', $request->status);
+    }
+
+    // 🌍 Filter: Abroad
+    if ($request->abroad != '') {
+        $query->where('is_abroad', $request->abroad);
+    }
+
+    return datatables()->eloquent($query)
+        ->addIndexColumn() // auto serial
+        ->editColumn('is_abroad', function ($m) {
+            return $m->is_abroad ? 'Yes' : 'No';
+        })
+        ->editColumn('status', function ($m) {
+            return $m->status ?: 'Active';
+        })
+        ->rawColumns(['status'])
+        ->make(true);
+}
+
+🧩 4. Blade File (DataTable with AJAX)
+
+Create/edit:
+
+resources/views/life_members/index.blade.php
+
+@extends('layouts.app')
+
+@section('content')
+<div class="container">
+
+    <h4 class="mb-3">Life Members List (AJAX DataTable)</h4>
+
+    <!-- Filters -->
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <select id="status_filter" class="form-control">
+                <option value="">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Deceased">Deceased</option>
+            </select>
+        </div>
+
+        <div class="col-md-3">
+            <select id="abroad_filter" class="form-control">
+                <option value="">All</option>
+                <option value="1">Abroad</option>
+                <option value="0">Not Abroad</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <table class="table table-bordered" id="members-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>LM No</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Abroad?</th>
+                <th>Address</th>
+            </tr>
+        </thead>
+    </table>
+
+</div>
+@endsection
+
+@push('scripts')
+<!-- jQuery + DataTables -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    $(function () {
+
+        let table = $('#members-table').DataTable({
+            processing: true,
+            serverSide: true,
+            ajax: {
+                url: "{{ route('life-members.ajax') }}",
+                data: function (d) {
+                    d.status = $('#status_filter').val();
+                    d.abroad = $('#abroad_filter').val();
+                }
+            },
+            columns: [
+                { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
+                { data: 'lm_no', name: 'lm_no' },
+                { data: 'name', name: 'name' },
+                { data: 'status', name: 'status' },
+                { data: 'is_abroad', name: 'is_abroad' },
+                { data: 'address', name: 'address' },
+            ]
+        });
+
+        // Reload on filter change
+        $('#status_filter, #abroad_filter').change(function () {
+            table.ajax.reload();
+        });
+
+    });
+</script>
+@endpush
+
+🎉 5. Add CSS (Bootstrap DataTable)
+In your layout file (layouts/app.blade.php):
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
