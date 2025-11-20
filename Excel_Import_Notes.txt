@@ -1,0 +1,212 @@
+1. resources\views\admin\members\life_members\import.blade.php
+2. resources\views\admin\members\life_members\index.blade.php
+3. app/Imports/LifeMemberImport.php
+4. app/Models/LifeMember.php
+5. app\Http\Controllers\Admin\LifeMemberController.php
+6. routes/web.php
+7. database/migrations/2025_11_20_123223_create_life_members_table.php
+
+Steps:
+1.
+>php artisan make:migration create_life_members_table
+
+database/migrations/2025_11_20_123223_create_life_members_table.php
+
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('life_members', function (Blueprint $table) {
+            $table->id();
+
+            // Official Life Member Number (Unique)
+            $table->integer('lm_no')->unique();
+
+            // Member Name
+            $table->string('name', 255);
+
+            // Status (Active, Inactive, Deceased, etc.)
+            $table->string('status', 50)->nullable();
+
+            // Additional remarks regarding status
+            $table->text('status_remarks')->nullable();
+
+            // Whether the member is abroad (0 = No, 1 = Yes)
+            $table->boolean('is_abroad')->default(false);
+
+            // Full address (can be long)
+            $table->text('address')->nullable();
+
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('life_members');
+    }
+};
+
+2. 
+>php artisan make:model LifeMember
+
+app/Models/LifeMember.php
+
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class LifeMember extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'lm_no',
+        'name',
+        'status',
+        'status_remarks',
+        'is_abroad',
+        'address',
+    ];
+}
+
+3.
+>composer require maatwebsite/excel
+
+4. 
+>php artisan make:import LifeMemberImport --model=LifeMember
+
+app/Imports/LifeMemberImport.php
+
+<?php
+
+namespace App\Imports;
+
+use App\Models\LifeMember;
+use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
+
+class LifeMemberImport implements ToModel, WithHeadingRow
+{
+    public function model(array $row)
+    {
+        return new LifeMember([
+            'lm_no'          => $row['lm_no'],
+            'name'           => $row['name'],
+            'status'         => $row['status'] ?? null,
+            'status_remarks' => $row['status_remarks'] ?? null,
+            'is_abroad'      => $row['is_abroad'] ?? 0,
+            'address'        => $row['address'] ?? null,
+        ]);
+    }
+}
+
+⚠️ Important
+
+Your Excel header row must be:
+
+lm_no | name | status | status_remarks | is_abroad | address
+
+5. Controller for Importing
+
+Create controller:
+
+>php artisan make:controller LifeMemberController
+
+app\Http\Controllers\Admin\LifeMemberController.php
+
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\LifeMember;
+use Illuminate\Http\Request;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Imports\LifeMemberImport;
+
+class LifeMemberController extends Controller
+{
+    public function index()
+    {
+        $members = LifeMember::orderBy('lm_no', 'ASC')->paginate(50);
+
+        return view('life_members.index', compact('members'));
+    }
+
+    public function importView()
+    {
+        return view('life_members.import');
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv'
+        ]);
+
+        Excel::import(new LifeMemberImport, $request->file('file'));
+
+        return redirect()->route('life-members.index')
+                         ->with('success', 'Life Members imported successfully!');
+    }
+}
+
+6. Routes (web.php)
+use App\Http\Controllers\LifeMemberController;
+
+Route::get('/life-members', [LifeMemberController::class, 'index'])->name('life-members.index');
+
+Route::get('/life-members/import', [LifeMemberController::class, 'importView'])->name('life-members.import-view');
+Route::post('/life-members/import', [LifeMemberController::class, 'import'])->name('life-members.import');
+
+7. Admin Panel Listing Page (Blade + Pagination)
+
+resources\views\admin\members\life_members\index.blade.php
+
+8. Excel Upload Page
+
+resources\views\admin\members\life_members\import.blade.php
+
+Optional: Seeder (if needed)
+
+>php artisan make:seeder LifeMemberSeeder
+
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use App\Models\LifeMember;
+
+class LifeMemberSeeder extends Seeder
+{
+    public function run(): void
+    {
+        LifeMember::create([
+            'lm_no' => 1,
+            'name' => 'John Doe',
+            'status' => 'Active',
+            'status_remarks' => null,
+            'is_abroad' => false,
+            'address' => 'Dhaka, Bangladesh'
+        ]);
+    }
+}
+
+>php artisan db:seed --class=LifeMemberSeeder
+
