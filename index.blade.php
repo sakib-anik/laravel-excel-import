@@ -26,7 +26,7 @@
         <tbody>
             @foreach($members as $key => $member)
             <tr>
-                <td>{{ $key + 1 }}</td>
+                <td>{{ $members->firstItem() + $key }}</td>
                 <td>{{ $member->lm_no }}</td>
                 <td>{{ $member->name }}</td>
                 <td>{{ $member->status }}</td>
@@ -40,4 +40,5 @@
     {!! $members->links('pagination::bootstrap-4') !!}
 
 </div>
+
 @endsection
