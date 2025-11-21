@@ -148,3 +148,156 @@ resources/views/life_members/index.blade.php
 🎉 5. Add CSS (Bootstrap DataTable)
 In your layout file (layouts/app.blade.php):
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+
+🔥 Edit/Delete actions 
+🔥 Status badges (green/yellow/red)
+
+Add routes in web.php:
+Route::get('/life-members/{id}/edit', [LifeMemberController::class, 'edit'])->name('life-members.edit');
+Route::post('/life-members/{id}/update', [LifeMemberController::class, 'update'])->name('life-members.update');
+Route::delete('/life-members/{id}/delete', [LifeMemberController::class, 'destroy'])->name('life-members.destroy');
+
+Add Edit, Update, Delete Methods in Controller
+public function edit($id)
+{
+    $member = LifeMember::findOrFail($id);
+    return view('life_members.edit', compact('member'));
+}
+
+public function update(Request $request, $id)
+{
+    $member = LifeMember::findOrFail($id);
+
+    $request->validate([
+        'name' => 'required',
+        'status' => 'nullable|string',
+        'address' => 'nullable|string',
+    ]);
+
+    $member->update($request->all());
+
+    return redirect()->route('life-members.index')->with('success', 'Member updated successfully!');
+}
+
+public function destroy($id)
+{
+    LifeMember::findOrFail($id)->delete();
+    return response()->json(['success' => true]);
+}
+
+Status Badges (Green / Yellow / Red)
+
+Modify the status column in the AJAX response:
+
+->editColumn('status', function ($m) {
+    $status = $m->status ?: 'Active';
+
+    $color = match ($status) {
+        'Active' => 'success',
+        'Inactive' => 'warning',
+        'Deceased' => 'danger',
+        default => 'secondary',
+    };
+
+    return "<span class='badge bg-$color'>$status</span>";
+})
+->rawColumns(['status', 'actions'])
+
+Add Edit/Delete Buttons to DataTable
+In DataTable AJAX columns, add a new "Actions" column.
+
+Update your JS:
+columns: [
+    { data: 'DT_RowIndex', name: 'DT_RowIndex', orderable: false, searchable: false },
+    { data: 'lm_no', name: 'lm_no' },
+    { data: 'name', name: 'name' },
+    { data: 'status', name: 'status' },
+    { data: 'is_abroad', name: 'is_abroad' },
+    { data: 'address', name: 'address' },
+    { data: 'actions', name: 'actions', orderable: false, searchable: false },
+]
+
+Add Actions Column in Controller AJAX method
+Inside ajax() add:
+->addColumn('actions', function ($m) {
+    $editUrl = route('life-members.edit', $m->id);
+
+    return "
+        <a href='$editUrl' class='btn btn-sm btn-primary'>Edit</a>
+        <button class='btn btn-sm btn-danger delete-btn' data-id='$m->id'>Delete</button>
+    ";
+})
+
+And again:
+->rawColumns(['status', 'actions'])
+
+Add Delete AJAX Script Inside Blade
+Inside the <script> tag, below DataTable code:
+$(document).on('click', '.delete-btn', function () {
+    if (!confirm('Are you sure you want to delete this member?')) return;
+
+    let id = $(this).data('id');
+
+    $.ajax({
+        url: "/life-members/" + id + "/delete",
+        type: "DELETE",
+        data: { _token: "{{ csrf_token() }}" },
+        success: function (resp) {
+            $('#members-table').DataTable().ajax.reload();
+        }
+    });
+});
+
+Create Edit Page
+Create:
+resources/views/life_members/edit.blade.php
+@extends('layouts.app')
+
+@section('content')
+<div class="container">
+
+    <h4>Edit Life Member</h4>
+
+    <form method="POST" action="{{ route('life-members.update', $member->id) }}">
+        @csrf
+
+        <div class="mb-3">
+            <label>LM No</label>
+            <input type="text" class="form-control" value="{{ $member->lm_no }}" disabled>
+        </div>
+
+        <div class="mb-3">
+            <label>Name *</label>
+            <input type="text" name="name" class="form-control" value="{{ $member->name }}" required>
+        </div>
+
+        <div class="mb-3">
+            <label>Status</label>
+            <select name="status" class="form-control">
+                <option value="Active" {{ $member->status == 'Active' ? 'selected' : '' }}>Active</option>
+                <option value="Inactive" {{ $member->status == 'Inactive' ? 'selected' : '' }}>Inactive</option>
+                <option value="Deceased" {{ $member->status == 'Deceased' ? 'selected' : '' }}>Deceased</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label>Abroad?</label>
+            <select name="is_abroad" class="form-control">
+                <option value="0" {{ !$member->is_abroad ? 'selected' : '' }}>No</option>
+                <option value="1" {{ $member->is_abroad ? 'selected' : '' }}>Yes</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label>Address</label>
+            <textarea name="address" class="form-control">{{ $member->address }}</textarea>
+        </div>
+
+        <button class="btn btn-success">Update Member</button>
+        <a href="{{ route('life-members.index') }}" class="btn btn-secondary">Back</a>
+
+    </form>
+
+</div>
+@endsection
+
